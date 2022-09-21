@@ -1,0 +1,36 @@
+#!/bin/bash
+
+# Check that the reference to the JIRA issue is the same as in the branch
+
+# This file must be named pre-receive, and be saved in the hook directory in a bare git repository.
+# Run "chmod +x pre-receive" to make it executable.
+
+REGEX_ISSUE_ID="^[A-Z0-9]+-[0-9]+"
+
+while read oldrev newrev refname
+do
+    BRANCH_NAME="$(echo $refname | sed 's/refs\/heads\///g')"
+    BRANCH_ISSUE_ID=$(echo $BRANCH_NAME | grep -o -E $REGEX_ISSUE_ID)
+
+    if [[ "$oldrev" == "0000000000000000000000000000000000000000" ]]; then
+        REV_LIST=$(git rev-list "$(git show-branch --merge-base)".."$newrev")
+    else
+        REV_LIST=$(git rev-list $oldrev..$newrev)
+    fi
+
+    for SHA1_COMMIT in $REV_LIST;
+    do
+        COMMIT_MESSAGE=$(git log --format=%B -n 1 $SHA1_COMMIT)
+        COMMIT_MESSAGE_ISSUE_ID=$(echo $COMMIT_MESSAGE | grep -o -E $REGEX_ISSUE_ID)
+
+        if [[ -n "$BRANCH_ISSUE_ID" ]]; then
+            if [[ -z "$COMMIT_MESSAGE_ISSUE_ID" || $BRANCH_ISSUE_ID -ne $COMMIT_MESSAGE_ISSUE_ID ]]; then
+                echo "[POLICY] Check the commit message! The reference to the JIRA issue should be the same as in the branch." >&2
+                echo "[POLICY] Commit $SHA1_COMMIT" >&2
+                echo "[POLICY] Message: $COMMIT_MESSAGE" >&2
+                exit 1
+            fi
+        fi
+    done
+done
+exit 0
